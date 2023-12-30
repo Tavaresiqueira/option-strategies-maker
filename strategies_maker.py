@@ -10,11 +10,9 @@ import pandas as pd
 
 # Module-specific imports
 from general_functions import (
-    black_scholes_call,
-    black_scholes_put,
     calculate_call_greeks,
     calculate_put_greeks,
-    aggregate_greeks,
+    aggregate_greeks
 )
 
 class StrategiesMaker:
@@ -201,6 +199,31 @@ class StrategiesMaker:
         greeks_put = calculate_put_greeks(S, strike, T, self.risk_free_rate, self.implied_volatility)
 
         return aggregate_greeks(greeks_call, greeks_put)
+    
+    def calculate_short_straddle_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
+        """
+        Calculate the Greeks for a short straddle options strategy.
+
+        Parameters:
+            S (float): The spot price of the underlying asset.
+            T (float): The time to expiration of the options.
+
+        Returns:
+            Dict[str, float]: A dictionary containing the aggregated Greeks for the short straddle.
+
+        """
+
+        if T is None:
+            T = (self.expiration_date - datetime.now()).days / 365
+        if S is None:
+            S = self.stock_data['Close'].iloc[-1]
+
+        strike = S
+
+        greeks_call = calculate_call_greeks(S, strike, T, self.risk_free_rate, self.implied_volatility)
+        greeks_put = calculate_put_greeks(S, strike, T, self.risk_free_rate, self.implied_volatility)
+
+        return aggregate_greeks({k: -v for k, v in greeks_call.items()}, {k: -v for k, v in greeks_put.items()})
 
     def calculate_long_strangle_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
         """
@@ -227,6 +250,31 @@ class StrategiesMaker:
 
         return aggregate_greeks(greeks_call, greeks_put)
 
+    def calculate_short_strangle_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
+        """
+        Calculate the Greeks for a short strangle option strategy.
+
+        Parameters:
+            S (float): The current price of the underlying asset.
+            T (float): The time to expiration of the options.
+
+        Returns:
+            Dict[str, float]: A dictionary containing the aggregated Greeks for the short strangle option strategy.
+        """
+
+        if T is None:
+            T = (self.expiration_date - datetime.now()).days / 365
+        if S is None:
+            S = self.stock_data['Close'].iloc[-1]
+
+        lower_strike = S * 0.95
+        upper_strike = S * 1.05
+
+        greeks_call = calculate_call_greeks(S, upper_strike, T, self.risk_free_rate, self.implied_volatility)
+        greeks_put = calculate_put_greeks(S, lower_strike, T, self.risk_free_rate, self.implied_volatility)
+
+        return aggregate_greeks({k: -v for k, v in greeks_call.items()}, {k: -v for k, v in greeks_put.items()})
+    
     def calculate_protective_collar_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
         """
         Calculate the Greeks for a protective collar strategy.
@@ -251,7 +299,7 @@ class StrategiesMaker:
         greeks_put_long = calculate_put_greeks(S, put_strike, T, self.risk_free_rate, self.implied_volatility)
 
         return aggregate_greeks({k: -v for k, v in greeks_call_short.items()}, greeks_put_long)
-
+    
     def plot_greeks_across_price_range(self, strategy: str, price_deviation: float = 0.2):
         """
         Plot Greeks across a range of stock prices for a specified strategy.
@@ -306,6 +354,183 @@ class StrategiesMaker:
         
         # Plot the greeks
         self._plot_greeks(price_range, deltas, gammas, thetas, vegas, rhos)
+    
+    def calculate_fig_leaf_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
+        """
+        Calculate Greeks for a Fig Leaf (Leveraged Covered Call) strategy at a given stock price.
+
+        :param S: Stock price.
+        :param T: Time to expiration in years. If not provided, it defaults to the time until the expiration date.
+        :return: A dictionary of Greek values.
+        """
+        if T is None:
+            T = (self.expiration_date - datetime.now()).days / 365
+        if S is None:
+            S = self.stock_data['Close'].iloc[-1]
+
+        # Define the strike price for the call option you sell
+        sold_call_strike = S * 1.05  # Example: 5% above current price
+
+        # Define the strike price for the longer-term in-the-money call option you buy
+        bought_call_strike = S * 0.95  # Example: 5% below current price
+
+        # Calculate Greeks for both the sold and bought call options
+        greeks_sold_call = calculate_call_greeks(S, sold_call_strike, T, self.risk_free_rate, self.implied_volatility)
+        greeks_bought_call = calculate_call_greeks(S, bought_call_strike, T, self.risk_free_rate, self.implied_volatility)
+        
+        return aggregate_greeks({k: -v for k, v in greeks_sold_call.items()}, greeks_bought_call)
+    
+    def calculate_backspread_with_calls_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
+        """
+        Calculate Greeks for a Backspread with Calls strategy.
+        This strategy involves buying more call options than selling.
+        """
+        if T is None:
+            T = (self.expiration_date - datetime.now()).days / 365
+        if S is None:
+            S = self.stock_data['Close'].iloc[-1]
+
+        # Define the strike price for the call option
+        strike_call_sold = S  # ATM option sold
+        strike_call_bought = S * 1.1  # OTM option bought
+
+        # Greeks for the sold call option
+        greeks_call_sold = calculate_call_greeks(S, strike_call_sold, T, self.risk_free_rate, self.implied_volatility)
+
+        # Greeks for the bought call option (assuming we buy twice as many)
+        greeks_call_bought = calculate_call_greeks(S, strike_call_bought, T, self.risk_free_rate, self.implied_volatility)
+        greeks_call_bought = {k: 2 * v for k, v in greeks_call_bought.items()}  # Double the Greeks for the bought option
+
+        # Aggregate Greeks
+        return aggregate_greeks({k: -v for k, v in greeks_call_sold.items()}, greeks_call_bought)
+
+    def calculate_frontspread_with_calls_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
+        """
+        Calculate Greeks for a Frontspread with Calls strategy.
+        This strategy involves buying more call options than selling.
+        """
+        if T is None:
+            T = (self.expiration_date - datetime.now()).days / 365
+        if S is None:
+            S = self.stock_data['Close'].iloc[-1]
+
+        # Define the strike price for the call option
+        strike_call_bought = S  # ATM option bought
+        strike_call_sold = S * 1.1  # OTM option sold
+
+        # Greeks for the bought call option
+        greeks_call_bought = calculate_call_greeks(S, strike_call_bought, T, self.risk_free_rate, self.implied_volatility)
+
+        # Greeks for the sold call option (assuming we buy twice as many)
+        greeks_call_sold = calculate_call_greeks(S, strike_call_sold, T, self.risk_free_rate, self.implied_volatility)
+        greeks_call_sold = {k: 2 * v for k, v in greeks_call_sold.items()}  # Double the Greeks for the bought option
+
+        # Aggregate Greeks
+        return aggregate_greeks({k: -v for k, v in greeks_call_sold.items()}, greeks_call_bought)
+
+    def calculate_backspread_with_puts_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
+        """
+        Calculate Greeks for a Backspread with Puts strategy.
+        """
+        if T is None:
+            T = (self.expiration_date - datetime.now()).days / 365
+        if S is None:
+            S = self.stock_data['Close'].iloc[-1]
+
+        # Define strikes for the put options
+        strike_put_sold = S  # ATM option sold
+        strike_put_bought = S * 0.9  # ITM option bought
+
+        # Greeks for the sold put option
+        greeks_put_sold = calculate_put_greeks(S, strike_put_sold, T, self.risk_free_rate, self.implied_volatility)
+
+        # Greeks for the bought put option
+        greeks_put_bought = calculate_put_greeks(S, strike_put_bought, T, self.risk_free_rate, self.implied_volatility)
+        greeks_put_bought = {k: 2 * v for k, v in greeks_put_bought.items()}  # Assume buying more puts than selling
+
+        return aggregate_greeks({k: -v for k, v in greeks_put_sold.items()}, greeks_put_bought)
+    
+    def calculate_frontspread_with_puts_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
+        """
+        Calculate Greeks for a Frontspread with Puts strategy.
+        This strategy involves buying more put options than selling.
+        """
+        if T is None:
+            T = (self.expiration_date - datetime.now()).days / 365
+        if S is None:
+            S = self.stock_data['Close'].iloc[-1]
+
+        # Define the strike price for the put option
+        strike_put_bought = S  # ATM option bought
+        strike_put_sold = S * 0.9  # ITM option sold
+
+        # Greeks for the bought put option
+        greeks_put_bought = calculate_put_greeks(S, strike_put_bought, T, self.risk_free_rate, self.implied_volatility)
+
+        # Greeks for the sold put option (assuming we buy twice as many)
+        greeks_put_sold = calculate_put_greeks(S, strike_put_sold, T, self.risk_free_rate, self.implied_volatility)
+        greeks_put_sold = {k: 2 * v for k, v in greeks_put_sold.items()}  # Double the Greeks for the bought option
+
+        # Aggregate Greeks
+        return aggregate_greeks({k: -v for k, v in greeks_put_sold.items()}, greeks_put_bought)
+    
+    def calculate_calendar_spread_with_calls_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
+        """
+        Calculates the greeks for a calendar spread strategy using call options.
+
+        Parameters:
+        - S (float): The underlying stock price. If not provided, the last closing price of the stock will be used.
+        - T (float): The time until expiration in years. If not provided, the time until expiration will be calculated as the number of days between the expiration date and the current date divided by 365.
+
+        Returns:
+        - Dict[str, float]: A dictionary containing the aggregated greeks for the calendar spread strategy with call options. The keys represent the greek names, and the values represent the corresponding greek values.
+
+        """
+        if T is None:
+            T = (self.expiration_date - datetime.now()).days / 365
+        if S is None:
+            S = self.stock_data['Close'].iloc[-1]
+
+        # Define strikes for the put options
+        strike_call_sold = S  # ATM option sold
+        strike_call_bought = S   # ITM option bought
+
+        # Greeks for the sold call option
+        greeks_near_call_sold = calculate_call_greeks(S, strike_call_sold, T * 0.70, self.risk_free_rate, self.implied_volatility)
+
+        # Greeks for the bought put option
+        greeks_far_call_bought = calculate_call_greeks(S, strike_call_bought, T, self.risk_free_rate, self.implied_volatility)
+
+        return aggregate_greeks({k: -v for k, v in greeks_near_call_sold.items()}, greeks_far_call_bought)
+    
+    def calculate_calendar_spread_with_puts_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
+        """
+        Calculates the greeks for a calendar spread strategy using put options.
+
+        Parameters:
+        - S (float): The underlying stock price. If not provided, the last closing price of the stock will be used.
+        - T (float): The time until expiration in years. If not provided, the time until expiration will be calculated as the number of days between the expiration date and the current date divided by 365.
+
+        Returns:
+        - Dict[str, float]: A dictionary containing the aggregated greeks for the calendar spread strategy with put options. The keys represent the greek names, and the values represent the corresponding greek values.
+
+        """
+        if T is None:
+            T = (self.expiration_date - datetime.now()).days / 365
+        if S is None:
+            S = self.stock_data['Close'].iloc[-1]
+
+        # Define strikes for the put options
+        strike_put_sold = S  # ATM option sold
+        strike_put_bought = S   # ITM option bought
+
+        # Greeks for the sold put option
+        greeks_near_put_sold = calculate_put_greeks(S, strike_put_sold, T * 0.70, self.risk_free_rate, self.implied_volatility)
+
+        # Greeks for the bought put option
+        greeks_far_put_bought = calculate_put_greeks(S, strike_put_bought, T, self.risk_free_rate, self.implied_volatility)
+
+        return aggregate_greeks({k: -v for k, v in greeks_near_put_sold.items()}, greeks_far_put_bought)
 
     @staticmethod
     def _plot_greeks(price_range: np.array, deltas: list, gammas: list, thetas: list, vegas: list, rhos: list):
