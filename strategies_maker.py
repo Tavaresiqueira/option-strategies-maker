@@ -50,6 +50,10 @@ class StrategiesMaker:
         """
         Calculate Greeks for a butterfly spread at a given stock price.
 
+        The butterfly spread is a strategy that involves buying one call option at a lower strike price,
+        selling two call options at the middle strike price, and buying one call option at a higher strike price.
+        It is used when the trader expects the underlying asset to remain relatively stable.
+
         :param S: Stock price.
         :param T: Time to expiration in years. If not provided, it defaults to the time until the expiration date.
         :return: A dictionary of Greek values.
@@ -72,6 +76,14 @@ class StrategiesMaker:
         """
         Calculate the total Greeks for an iron condor spread.
 
+        This function calculates the total Greeks for an iron condor spread strategy.
+        The iron condor spread involves selling an out-of-the-money put and an out-of-the-money call option,
+        while simultaneously buying an even further out-of-the-money put and call option.
+        The strategy profits from the underlying asset staying within a certain price range.
+
+        :param S: The current price of the underlying asset.
+        :param T: The time to expiration of the options.
+                If not provided, it is calculated as the difference between the expiration date and the current date.
         :return: A dictionary of aggregated Greek values.
         """
         if T is None:
@@ -92,11 +104,15 @@ class StrategiesMaker:
         greeks_upper_call = calculate_call_greeks(current_price, upper_call_strike, T, self.risk_free_rate, self.implied_volatility)
 
         # Aggregating Greeks
-        return aggregate_greeks(greeks_lower_put, greeks_upper_put, {k: -v for k, v in greeks_lower_call.items()}, {k: -v for k, v in greeks_upper_call.items()})
+        return aggregate_greeks(greeks_lower_put, {k: -v for k, v in greeks_upper_put.items()}, {k: -v for k, v in greeks_lower_call.items()}, greeks_upper_call)
 
     def calculate_bull_put_spread_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
         """
         Calculate the Greeks of a bull put spread options strategy.
+
+        This function calculates the Greeks of a bull put spread options strategy.
+        The bull put spread involves selling a put option with a higher strike price
+        and buying a put option with a lower strike price.
 
         Parameters:
             S (float): The current price of the underlying asset.
@@ -121,19 +137,14 @@ class StrategiesMaker:
     def calculate_bear_put_spread_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
         """
         Calculate the Greeks for a bear put spread options strategy.
-        
-        This function takes the current stock price (S) and time to expiration (T) as input parameters.
-        It calculates the lower strike (lower_strike) as 95% of the current stock price and the upper strike (upper_strike) as 105% of the current stock price.
-        
-        It then calls the 'calculate_put_greeks' function twice, once for the upper strike and once for the lower strike, to calculate the Greeks (greeks_put_long and greeks_put_short).
-        The 'calculate_put_greeks' function takes the current stock price, strike price, time to expiration, risk-free rate, and implied volatility as input parameters and returns a dictionary of Greeks.
-        
-        Finally, the function calls the 'aggregate_greeks' function to aggregate the Greeks of the long put option (greeks_put_long) and the short put option (greeks_put_short) and returns the resulting dictionary.
-        
+
+        The bear put spread strategy involves buying a put option with a lower strike price and selling a put option with a higher strike price.
+        The goal of this strategy is to profit from a decrease in the price of the underlying stock, while limiting potential losses.
+
         Parameters:
         - S (float): The current stock price.
         - T (float): The time to expiration.
-        
+
         Returns:
         - Dict[str, float]: A dictionary of Greeks for the bear put spread options strategy.
         """
@@ -154,6 +165,11 @@ class StrategiesMaker:
         """
         Calculates the Greeks for a bear call spread options strategy.
 
+        This function calculates the Greeks, such as Delta, Gamma, Theta, and Vega, for a bear call spread options strategy.
+        The bear call spread strategy involves selling a call option with a lower strike price and buying a call option 
+        with a higher strike price, both with the same expiration date. The goal of this strategy is to profit from a 
+        decrease in the price of the underlying asset.
+
         Args:
             S (float): The current price of the underlying asset.
             T (float): The time to expiration of the options contracts.
@@ -162,22 +178,26 @@ class StrategiesMaker:
             Dict[str, float]: A dictionary containing the aggregate Greeks for the bear call spread strategy.
         """
 
-        if T is None:    
+        if T is None:
             T = (self.expiration_date - datetime.now()).days / 365
         if S is None:
             S = self.stock_data['Close'].iloc[-1]
 
-        lower_strike = S * 0.95
-        upper_strike = S * 1.05
+        lower_strike = S * 1.05
+        upper_strike = S * 1.15
 
         greeks_call_long = calculate_call_greeks(S, upper_strike, T, self.risk_free_rate, self.implied_volatility)
         greeks_call_short = calculate_call_greeks(S, lower_strike, T, self.risk_free_rate, self.implied_volatility)
 
-        return aggregate_greeks({k: -v for k, v in greeks_call_long.items()}, greeks_call_short)
+        return aggregate_greeks({k: -v for k, v in greeks_call_short.items()}, greeks_call_long)
 
     def calculate_long_straddle_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
         """
         Calculate the Greeks for a long straddle options strategy.
+
+        The long straddle strategy involves buying both a call option and a put option with the same strike price and expiration date.
+        This strategy profits from significant movements in the underlying asset's price, regardless of direction.
+        The goal is to benefit from increased volatility.
 
         Parameters:
             S (float): The spot price of the underlying asset.
@@ -204,6 +224,10 @@ class StrategiesMaker:
         """
         Calculate the Greeks for a short straddle options strategy.
 
+        A short straddle is an options strategy where a trader sells both a call option and a put option with the same
+        strike price and expiration date. The strategy profits from a lack of significant movement in the underlying asset
+        price.
+
         Parameters:
             S (float): The spot price of the underlying asset.
             T (float): The time to expiration of the options.
@@ -228,6 +252,9 @@ class StrategiesMaker:
     def calculate_long_strangle_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
         """
         Calculate the Greeks for a long strangle option strategy.
+
+        The long strangle strategy involves buying both a call option and a put option on the same underlying asset 
+        with different strike prices. The goal is to profit from a significant price movement in either direction.
 
         Parameters:
             S (float): The current price of the underlying asset.
@@ -254,6 +281,9 @@ class StrategiesMaker:
         """
         Calculate the Greeks for a short strangle option strategy.
 
+        The short strangle strategy involves selling both a call option and a put option on the same underlying asset 
+        with different strike prices. The goal is to profit from a non-significant price movement.
+
         Parameters:
             S (float): The current price of the underlying asset.
             T (float): The time to expiration of the options.
@@ -262,22 +292,27 @@ class StrategiesMaker:
             Dict[str, float]: A dictionary containing the aggregated Greeks for the short strangle option strategy.
         """
 
-        if T is None:
-            T = (self.expiration_date - datetime.now()).days / 365
-        if S is None:
-            S = self.stock_data['Close'].iloc[-1]
+        # Set default values for S and T if not provided
+        T = T or (self.expiration_date - datetime.now()).days / 365
+        S = S or self.stock_data['Close'].iloc[-1]
 
+        # Calculate the lower and upper strike prices
         lower_strike = S * 0.95
         upper_strike = S * 1.05
 
+        # Calculate the option Greeks for the call and put options
         greeks_call = calculate_call_greeks(S, upper_strike, T, self.risk_free_rate, self.implied_volatility)
         greeks_put = calculate_put_greeks(S, lower_strike, T, self.risk_free_rate, self.implied_volatility)
 
+        # Aggregate the Greeks for the short strangle strategy
         return aggregate_greeks({k: -v for k, v in greeks_call.items()}, {k: -v for k, v in greeks_put.items()})
     
     def calculate_protective_collar_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
         """
         Calculate the Greeks for a protective collar strategy.
+
+        The protective collar strategy involves buying a put option to protect against a decrease in the price of the underlying asset,
+        while simultaneously selling a call option to offset the cost of the put option. This strategy limits both potential gains and losses.
 
         Args:
             S (float): The current price of the underlying asset.
@@ -383,31 +418,46 @@ class StrategiesMaker:
     def calculate_backspread_with_calls_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
         """
         Calculate Greeks for a Backspread with Calls strategy.
-        This strategy involves buying more call options than selling.
+
+        This strategy involves selling one call at a lower strike price and buying two calls at a higher strike price.
+
+        Args:
+            S (float): The stock price.
+            T (float): The time to expiration in years.
+
+        Returns:
+            Dict[str, float]: A dictionary containing the calculated Greeks.
         """
         if T is None:
             T = (self.expiration_date - datetime.now()).days / 365
         if S is None:
             S = self.stock_data['Close'].iloc[-1]
 
-        # Define the strike price for the call option
+        # Define the strike price for the call options
         strike_call_sold = S  # ATM option sold
         strike_call_bought = S * 1.1  # OTM option bought
 
-        # Greeks for the sold call option
+        # Calculate the Greeks for the sold call option
         greeks_call_sold = calculate_call_greeks(S, strike_call_sold, T, self.risk_free_rate, self.implied_volatility)
 
-        # Greeks for the bought call option (assuming we buy twice as many)
+        # Calculate the Greeks for the bought call option (assuming we buy twice as many)
         greeks_call_bought = calculate_call_greeks(S, strike_call_bought, T, self.risk_free_rate, self.implied_volatility)
         greeks_call_bought = {k: 2 * v for k, v in greeks_call_bought.items()}  # Double the Greeks for the bought option
 
-        # Aggregate Greeks
+        # Aggregate the Greeks
         return aggregate_greeks({k: -v for k, v in greeks_call_sold.items()}, greeks_call_bought)
 
     def calculate_frontspread_with_calls_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
         """
-        Calculate Greeks for a Frontspread with Calls strategy.
-        This strategy involves buying more call options than selling.
+
+        This function calculates the Greeks for a frontspread options strategy using call options. The frontspread strategy involves buying an at-the-money (ATM) call option and selling two out-of-the-money (OTM) call option at a strike price 10% higher. The function takes two optional parameters:
+
+        - `S` (float): The underlying stock price. If not provided, the function uses the last closing price from the `stock_data` attribute of the class instance.
+        - `T` (float): The time to expiration in years. If not provided, the function calculates it based on the current date and the expiration date from the class instance.
+
+        Returns:
+        - A dictionary containing the aggregated Greeks for the frontspread strategy. The keys of the dictionary are the Greek names (delta, gamma, theta, vega), and the values are the corresponding values.
+
         """
         if T is None:
             T = (self.expiration_date - datetime.now()).days / 365
@@ -430,7 +480,7 @@ class StrategiesMaker:
 
     def calculate_backspread_with_puts_greeks(self, S: float = None, T: float = None) -> Dict[str, float]:
         """
-        Calculate Greeks for a Backspread with Puts strategy.
+        
         """
         if T is None:
             T = (self.expiration_date - datetime.now()).days / 365
